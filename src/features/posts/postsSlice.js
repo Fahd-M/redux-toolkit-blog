@@ -29,6 +29,8 @@ export const addNewPost = createAsyncThunk('posts/addNewPost', async (initialPos
 
 export const updatePost = createAsyncThunk('posts/updatePost', async (initialPost) => {
     const { id } = initialPost;
+     // try-catch block only for development/testing with fake API
+    // otherwise, remove try-catch and add updatePost.rejected case
     try {
         const response = await axios.put(`${POSTS_URL}/${id}`, initialPost)
         return response.data
@@ -41,13 +43,9 @@ export const updatePost = createAsyncThunk('posts/updatePost', async (initialPos
 export const deletePost = createAsyncThunk('posts/deletePost', async(initialPost) => {
     const { id } = initialPost;
 
-    try { 
-        const response = await axios.delete(`${POSTS_URL}/${id}`)
-        if (response?.status === 200) return initialPost;
-        return `${response?.status}: ${response?.statusText}`;
-    } catch (err) {
-        return err.message;
-    }
+    const response = await axios.delete(`${POSTS_URL}/${id}`)
+    if (response?.status === 200) return initialPost;
+    return `${response?.status}: ${response?.statusText}`;
 })
 
 const postsSlice = createSlice({
@@ -105,12 +103,12 @@ const postsSlice = createSlice({
                 // Creating sortedPosts & assigning the id 
                 // would be not be needed if the fake API 
                 // returned accurate new post IDs
-                const sortedPosts = state.posts.sort((a, b) => {
-                    if (a.id > b.id) return 1
-                    if (a.id < b.id) return -1
-                    return 0
-                })
-                action.payload.id = sortedPosts[sortedPosts.length - 1].id + 1;
+                // const sortedPosts = state.posts.sort((a, b) => {
+                //     if (a.id > b.id) return 1
+                //     if (a.id < b.id) return -1
+                //     return 0
+                // })
+                action.payload.id = state.ids[state.ids.length - 1] + 1;
                 // End fix for fake API post IDs
 
                 
