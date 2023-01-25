@@ -25,6 +25,9 @@ const usersSlice = createSlice({
 
 export const selectAllUsers = (state) => state.users;
 
+export const selectUserById = (state, userId) => state.users.find(user => user.id === userId)
+
+
 export default usersSlice.reducer;
 
 //Next : to dispatch fetchUsers thunk: will go to index.js because we want to load users right when app starts
