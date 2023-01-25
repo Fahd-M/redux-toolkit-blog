@@ -1,16 +1,20 @@
-import { createSlice, nanoid, createAsyncThunk } from "@reduxjs/toolkit";
+import { createSlice, createAsyncThunk, createSelector, createEntityAdapter } from "@reduxjs/toolkit";
 import { sub } from 'date-fns';
 import axios from "axios";
 //generally first file to start this Redux workflow.
 
 const POSTS_URL = 'https://jsonplaceholder.typicode.com/posts';
 
-const initialState = {
-    posts: [],
+// Optimization(state Normalization) from PostsExcerpt starts here
+const postsAdapter = createEntityAdapter({
+    sortComparer: (a, b) => b.date.localeCompare(a.date) //similar to postsList sort 
+})
+
+const initialState = postsAdapter.getInitialState({
     status: 'idle' , // 'idle' | 'loading' | 'succeeded' | 'failed' 
     error: null,
     count: 0
-}
+})
 
 //createAsyncThunk accepts 2 args: string thats used as prefix for generated action type, payload creator callback that returns a promise that contains some data
 export const fetchPosts = createAsyncThunk('posts/fetchPosts', async () => {
@@ -54,7 +58,7 @@ const postsSlice = createSlice({
         
         reactionAdded(state, action) { 
             const { postId, reaction } = action.payload
-            const existingPost = state.posts.find(post => post.id === postId)
+            const existingPost = state.entities[postId]
             if (existingPost) {
                 existingPost.reactions[reaction]++ 
                 //technically mutating state but since within createSlice it is handled by EmerJs under hood.
@@ -88,7 +92,9 @@ const postsSlice = createSlice({
                 });
 
                 // Add any fetched posts to the array
-                state.posts = state.posts.concat(loadedPosts)
+                //Pre-optimization: state.posts = state.posts.concat(loadedPosts)
+                //Optimized: postadapter has own crud methods
+                postsAdapter.upsertMany(state, loadedPosts)
             })
             .addCase(fetchPosts.rejected, (state, action) => {
                 state.status = 'failed'
@@ -119,7 +125,9 @@ const postsSlice = createSlice({
                     coffee: 0   
                 }
                 console.log(action.payload)
-                state.posts.push(action.payload)
+                // Pre-optimization: state.posts.push(action.payload)
+                //Optimized: 
+                postsAdapter.addOne(state, action.payload)
             })
             .addCase(updatePost.fulfilled, (state, action) =>{
                 if (!action.payload?.id) {
@@ -127,10 +135,12 @@ const postsSlice = createSlice({
                     console.log(action.payload)
                     return;
                 }
-                const { id } = action.payload;
+                // Pre-optimization:const { id } = action.payload;
                 action.payload.date = new Date().toISOString();
-                const posts = state.posts.filter(post => post.id !== id);
-                state.posts = [...posts, action.payload];
+                // Pre-optimization: const posts = state.posts.filter(post => post.id !== id);
+                // Pre-optimization: state.posts = [...posts, action.payload];
+                //Optimized:
+                postsAdapter.upsertOne(state, action.payload)
             })
             .addCase(deletePost.fulfilled, (state, action) => {
                 if (!action.payload?.id) {
@@ -138,26 +148,50 @@ const postsSlice = createSlice({
                     console.log(action.payload)
                     return;
                 }
-                const { id } = action.payload;
-                const posts = state.posts.filter(post => post.id !== id);
-                state.posts = posts;
-
+                const { id } = action.payload; 
+                // Pre-optimization: const posts = state.posts.filter(post => post.id !== id);
+                // Pre-optimization: state.posts = posts;
+                postsAdapter.removeOne(state, id)
             })
             
     }
 })
 
-export const selectAllPosts = (state) => state.posts.posts; 
+//Optimization: getSelectors create these selectors and we rename them with aliases using destructuring
+// go to PostsList after to use this optimization, then postsExercept 
+export const {
+    selectAll: selectAllPosts,
+    selectById: selectPostById,
+    selectIds: selectPostIds
+    // pass in a selector that returns the posts slice of state
+} = postsAdapter.getSelectors(state => state.posts)
+
+// Pre-optimization:export const selectAllPosts = (state) => state.posts.posts; 
 export const getPostsStatus = (state) => state.posts.status;
 export const getPostsError = (state) => state.posts.error;
 export const getCount = (state) => state.posts.count;
 //Note: action creator functions are automatically created when you put a reducer in the createSlice 
 
-export const selectPostById = (state, postId) => state.posts.posts.find(post => post.id === postId);
+// Pre-optimization:export const selectPostById = (state, postId) => state.posts.posts.find(post => post.id === postId);
+
+export const selectPostsByUser = createSelector(
+    // accepts 1 or more input functions , notice that they are inside [] like array. therefore the values returned are the DEPENDENCIES
+    // DEPENDENCIES (provide input parameters ((posts,userId)) for output fx of memoized selector)
+    // if selectAllPosts value changes or anonymous fx that returns userID change
+    //if posts or userId changes thats the only time we get something new from selector(or it re-runs).
+    [selectAllPosts, (state, userId) => userId],
+    (posts,userId) => posts.filter(post => post.userId === userId)
+)
 
 export const { increaseCount, reactionAdded } = postsSlice.actions;
 
 export default postsSlice.reducer;
+
+
+
+
+
+
 
 //  ****** THIS BELOW CODE NO LONGER NEEDED DUE TO ASYNC THUNK BEING USED. WAS PREVIOUSLY INSIDE reducers: {}. //
 
