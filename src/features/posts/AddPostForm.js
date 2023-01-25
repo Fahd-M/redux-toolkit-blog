@@ -1,16 +1,18 @@
 import { useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { postAdded } from "./postsSlice";
+import { addNewPost } from "./postsSlice";
 import { selectAllUsers } from "../users/usersSlice";
-
+import { useNavigate } from "react-router-dom";
 
 const AddPostForm = () => {
     const dispatch = useDispatch();
+    const navigate = useNavigate();
 
 // no need to include these in global state since they local to the form component
     const [title, setTitle] = useState('');
     const [content, setContent] = useState('');
     const [userId, setUserId] = useState('');
+    const [addRequestStatus, setAddRequestStatus] = useState('idle');
 
     const users = useSelector(selectAllUsers)
 
@@ -18,18 +20,31 @@ const AddPostForm = () => {
     const onContentChanged = e => setContent(e.target.value)
     const onAuthorChanged = e => setUserId(e.target.value)
 
-    const onSavePostClicked = () => {
-        if (title && content) {
-            dispatch(
-                postAdded(title, content, userId)
-            )
-            setTitle('')
-            setContent('')
-        }
-    }
+    const canSave = [title, content, userId].every(Boolean) && addRequestStatus === 'idle';
+    //checking if title, content, userId all true - if so, then can enable form button 
+    //and checking that addRequestStatus state is idle before the save button can be used
 
-    const canSave = Boolean(title) && Boolean(content) && Boolean(userId);
-    //checking if title, content, userId all true - if so, then can enable form button
+    const onSavePostClicked = () => {
+        if (canSave) {
+            try {
+                setAddRequestStatus('pending')
+                dispatch(addNewPost({ title, body: content, userId })).unwrap()
+                // dispatching addNewPost thunk, passing in title, body and userId. 
+                // reduxtoolkit adds unwrap fx to the returned promise. 
+                //which then returns a new promise that either has action payload or throws error (lets us use try catch logic)
+
+                setTitle('')
+                setContent('')
+                setUserId('')
+                navigate('/')
+            } catch (err) {
+                console.error('Failed to save the post', err)
+            } finally {
+                setAddRequestStatus('idle')
+            }
+        }
+        
+    }
 
     const usersOptions = users.map(user => ( 
         <option key={user.id} value={user.id}>
